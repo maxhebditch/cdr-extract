@@ -19,44 +19,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('filename')
 args = parser.parse_args()
 
-fasta_file = args.filename
-
-with open(fasta_file,"r") as fasta:
-    for line in fasta:
-        #Look for name line
-        if line.startswith(">"):
-            ab_name = line.replace(">","")
-            ab_name = ab_name.strip()
-        #If not a name line
-        else:
-            chain_sequence = line.replace("\n","")
-            heavy_pattern = re.compile("VS[SA]")
-            light_pattern = re.compile("(E[LIV]KR)|(E[LIV]KKR)|EIIKR|(TVL[GSA])")  
-
-            chain_str = "".join(str(a) for a in list(chain_sequence))
-
-            def extract_V(match_array):
-                if len(match_array) > 1:
-                    V_string = "".join(seq for seq in match_array)
-                else:
-                    V_string = match_array[0]
-                
-                return V_string
-
-            if re.search(light_pattern, chain_str) is not None:
-                match = re.search(light_pattern, chain_str).group(0)
-                light_regex = r"(.*?)" + re.escape(match)
-                VL_array = re.findall(light_regex, chain_str)
-                VL_sequence = extract_V(VL_array)
-                all_VL[ab_name] = V_class(ab_name,VL_sequence)
-            elif re.search(heavy_pattern, chain_str) is not None:
-                VH_array = re.findall("(.*?)VS[SA]", chain_str)
-                VH_sequence = extract_V(VH_array)
-                all_VH[ab_name] = V_class(ab_name,VH_sequence)
-            else:
-                print("Suspected non-ab chain")
-
-
 def build_CDR_and_non_array(input_sequence,input_index):
     CDR_all_index = []
     for CDR in input_index:
@@ -194,49 +156,80 @@ def CDRL_finder(sequence):
     CDRL_index.append([CDRL3_start,CDRL3_end])
     return CDRL1, CDRL2, CDRL3, CDRL_index
  
+fasta_file = args.filename
 fasta_file_name = os.path.splitext(fasta_file)[0]
 
-with open(fasta_file_name+"_VL"+".fasta","w") as outFile:
-    for VL in all_VL:
-        outFile.write(">"+all_VL[VL].name+"_VL\n")
-        outFile.write(all_VL[VL].sequence+"\n")
+with open(fasta_file,"r") as fasta:
+    for line in fasta:
+        #Look for name line
+        if line.startswith(">"):
+            ab_name = line.replace(">","")
+            ab_name = ab_name.strip()
+        #If not a name line
+        else:
+            chain_sequence = line.replace("\n","")
+            heavy_pattern = re.compile("VS[SA]")
+            light_pattern = re.compile("(E[LIV]KR)|(E[LIV]KKR)|EIIKR|(TVL[GSA])")  
 
-with open(fasta_file_name+"_VH"+".fasta","w") as outFile:
-    for VH in all_VH:
-        outFile.write(">"+all_VH[VH].name+"_VH\n")
-        outFile.write(all_VH[VH].sequence+"\n")
+            chain_str = "".join(str(a) for a in list(chain_sequence))
 
-with open(fasta_file_name+"_VL_CDR"+".fasta","w") as outFile:
-    for VL in all_VL:
-        VL_sequence = all_VL[VL].sequence
-        CDRL1, CDRL2, CDRL3, CDRL_index = CDRL_finder(VL_sequence)
-        VL_CDR_combined, VL_non_CDR_combined = build_CDR_and_non_array(VL_sequence,CDRL_index)
-        
-        outFile.write(">"+all_VL[VL].name+"_CDR1\n")
-        outFile.write(CDRL1+"\n")
-        outFile.write(">"+all_VL[VL].name+"_CDR2\n")
-        outFile.write(CDRL2+"\n")
-        outFile.write(">"+all_VL[VL].name+"_CDR3\n")
-        outFile.write(CDRL3+"\n")
-        outFile.write(">"+all_VL[VL].name+"_ALL_CDR\n")
-        outFile.write(VL_CDR_combined+"\n")
-        outFile.write(">"+all_VL[VL].name+"_non_CDR\n")
-        outFile.write(VL_non_CDR_combined+"\n")
+            def extract_V(match_array):
+                if len(match_array) > 1:
+                    V_string = "".join(seq for seq in match_array)
+                else:
+                    V_string = match_array[0]
+                
+                return V_string
 
+            if re.search(light_pattern, chain_str) is not None:
+                match = re.search(light_pattern, chain_str).group(0)
+                light_regex = r"(.*?)" + re.escape(match)
+                VL_array = re.findall(light_regex, chain_str)
+                VL_sequence = extract_V(VL_array)
+                all_VL[ab_name] = V_class(ab_name,VL_sequence)
+            elif re.search(heavy_pattern, chain_str) is not None:
+                VH_array = re.findall("(.*?)VS[SA]", chain_str)
+                VH_sequence = extract_V(VH_array)
+                all_VH[ab_name] = V_class(ab_name,VH_sequence)
+            else:
+                print("Suspected non-ab chain")
 
-with open(fasta_file_name+"_VH_CDR"+".fasta","w") as outFile:
-    for VH in all_VH:
-        VH_sequence = all_VH[VH].sequence
-        CDRH1, CDRH2, CDRH3, CDRH_index = CDRH_finder(VH_sequence)
-        VH_CDR_combined, VH_non_CDR_combined = build_CDR_and_non_array(VH_sequence,CDRL_index)
+if len(all_VL) > 0:
+    with open(fasta_file_name+"_VL_CDR"+".fasta","w") as outFile:
+        for VL in all_VL:
+            VL_sequence = all_VL[VL].sequence
+            CDRL1, CDRL2, CDRL3, CDRL_index = CDRL_finder(VL_sequence)
+            VL_CDR_combined, VL_non_CDR_combined = build_CDR_and_non_array(VL_sequence,CDRL_index)
+            
+            outFile.write(">"+all_VL[VL].name+"_VL\n")
+            outFile.write(all_VL[VL].sequence+"\n")
+            outFile.write(">"+all_VL[VL].name+"_CDRL1\n")
+            outFile.write(CDRL1+"\n")
+            outFile.write(">"+all_VL[VL].name+"_CDRL2\n")
+            outFile.write(CDRL2+"\n")
+            outFile.write(">"+all_VL[VL].name+"_CDRL3\n")
+            outFile.write(CDRL3+"\n")
+            outFile.write(">"+all_VL[VL].name+"_ALL_L_CDR\n")
+            outFile.write(VL_CDR_combined+"\n")
+            outFile.write(">"+all_VL[VL].name+"_non_L_CDR\n")
+            outFile.write(VL_non_CDR_combined+"\n")
 
-        outFile.write(">"+all_VH[VH].name+"_CDR1\n")
-        outFile.write(CDRH1+"\n")
-        outFile.write(">"+all_VH[VH].name+"_CDR2\n")
-        outFile.write(CDRH2+"\n")
-        outFile.write(">"+all_VH[VH].name+"_CDR3\n")
-        outFile.write(CDRH3+"\n")
-        outFile.write(">"+all_VH[VH].name+"_ALL_CDR\n")
-        outFile.write(VH_CDR_combined+"\n")
-        outFile.write(">"+all_VH[VH].name+"_non_CDR\n")
-        outFile.write(VH_non_CDR_combined+"\n")
+if len(all_VH) > 0:
+    with open(fasta_file_name+"_VH_CDR"+".fasta","w") as outFile:
+        for VH in all_VH:
+            VH_sequence = all_VH[VH].sequence
+            CDRH1, CDRH2, CDRH3, CDRH_index = CDRH_finder(VH_sequence)
+            VH_CDR_combined, VH_non_CDR_combined = build_CDR_and_non_array(VH_sequence,CDRH_index)
+
+            outFile.write(">"+all_VH[VH].name+"_VH\n")
+            outFile.write(all_VH[VH].sequence+"\n")
+            outFile.write(">"+all_VH[VH].name+"_CDRH1\n")
+            outFile.write(CDRH1+"\n")
+            outFile.write(">"+all_VH[VH].name+"_CDRH2\n")
+            outFile.write(CDRH2+"\n")
+            outFile.write(">"+all_VH[VH].name+"_CDRH3\n")
+            outFile.write(CDRH3+"\n")
+            outFile.write(">"+all_VH[VH].name+"_combined_H_CDR\n")
+            outFile.write(VH_CDR_combined+"\n")
+            outFile.write(">"+all_VH[VH].name+"_combined_non_H_CDR\n")
+            outFile.write(VH_non_CDR_combined+"\n")
