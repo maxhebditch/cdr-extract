@@ -1,29 +1,19 @@
 #!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
 
 import os
 import shutil
 import subprocess
 import re
-get_ipython().run_line_magic('matplotlib', 'inline')
-import matplotlib
-import matplotlib.pyplot as plt
-from IPython.display import HTML
+import argparse
 
 
-# In[2]:
+all_VL = {}
+all_VH = {}
 
-
-results = {}
-
-class antibody:
-    def __init__(self, name):
+class V_class:
+    def __init__(self, name, sequence):
         self.name = name
-        self.VH_sequence = VH_sequence
-        self.VL_sequence = VL_sequence
+        self.sequence = sequence
 
 parser = argparse.ArgumentParser()
 parser.add_argument('filename')
@@ -32,38 +22,39 @@ args = parser.parse_args()
 fasta_file = args.filename
 
 with open(fasta_file,"r") as fasta:
-    ab_name = ""
-    VH_sequence = ""
-    VL_sequence = ""
-    VH_found = False
-    VL_found = False
     for line in fasta:
+        #Look for name line
         if line.startswith(">"):
-            ab_name = line[:-4].replace(">","")
-            if "VH" in line:
-                VH_found = True
-            elif "VL" in line:
-                VL_found = True
-            else:
-                print("not VH or VL")
+            ab_name = line.replace(">","")
+            ab_name = ab_name.strip()
+        #If not a name line
         else:
-            if VH_found == True:
-                VH_sequence = line.replace("\n","")
-                VH_found = False
-            elif VL_found == True:
-                VL_sequence = line.replace("\n","")
-                VL_found = False
+            chain_sequence = line.replace("\n","")
+            heavy_pattern = re.compile("VS[SA]")
+            light_pattern = re.compile("(E[LIV]KR)|(E[LIV]KKR)|EIIKR|(TVL[GSA])")  
+
+            chain_str = "".join(str(a) for a in list(chain_sequence))
+
+            def extract_V(match_array):
+                if len(match_array) > 1:
+                    V_string = "".join(seq for seq in match_array)
+                else:
+                    V_string = match_array[0]
+                
+                return V_string
+
+            if re.search(light_pattern, chain_str) is not None:
+                match = re.search(light_pattern, chain_str).group(0)
+                light_regex = r"(.*?)" + re.escape(match)
+                VL_array = re.findall(light_regex, chain_str)
+                VL_sequence = extract_V(VL_array)
+                all_VL[ab_name] = V_class(ab_name,VL_sequence)
+            elif re.search(heavy_pattern, chain_str) is not None:
+                VH_array = re.findall("(.*?)VS[SA]", chain_str)
+                VH_sequence = extract_V(VH_array)
+                all_VH[ab_name] = V_class(ab_name,VH_sequence)
             else:
-                print("neither VH nor VL found")
-        if ab_name != "" and VH_sequence != "" and VL_sequence != "":
-            results[ab_name] = antibody(ab_name)
-            ab_name = ""
-            VH_sequence = ""
-            VL_sequence = ""
-        
-
-
-# In[53]:
+                print("Suspected non-ab chain")
 
 
 def build_CDR_and_non_array(input_sequence,input_index):
@@ -80,7 +71,7 @@ def build_CDR_and_non_array(input_sequence,input_index):
         else:
             non_CDR_combined_sequence.append(aa)
     
-    return CDR_combined_sequence, non_CDR_combined_sequence
+    return "".join(CDR_combined_sequence), "".join(non_CDR_combined_sequence)
 
 def find_sub_list(sl,l):
     results=[]
@@ -203,101 +194,49 @@ def CDRL_finder(sequence):
     CDRL_index.append([CDRL3_start,CDRL3_end])
     return CDRL1, CDRL2, CDRL3, CDRL_index
  
+fasta_file_name = os.path.splitext(fasta_file)[0]
 
-for antibody in results:
-    VH_sequence = (results[antibody].VH_sequence)
-    VL_sequence = (results[antibody].VL_sequence)
-    CDRL1, CDRL2, CDRL3, CDRL_index = CDRL_finder(VL_sequence)
-    CDRH1, CDRH2, CDRH3, CDRH_index = CDRH_finder(VH_sequence)
-    VL_CDR_combined, VL_non_CDR_combined = build_CDR_and_non_array(VL_sequence,CDRL_index)
-    VH_CDR_combined, VH_non_CDR_combined = build_CDR_and_non_array(VH_sequence,CDRH_index)
-    
-    results[antibody].CDRL1 = CDRL1
-    results[antibody].CDRL2 = CDRL2
-    results[antibody].CDRL3 = CDRL3
-    results[antibody].CDRH1 = CDRH1
-    results[antibody].CDRH2 = CDRH2
-    results[antibody].CDRH3 = CDRH3
-    
-    results[antibody].VL_CDR_combined = "".join(VL_CDR_combined)
-    results[antibody].VL_non_CDR_combined = "".join(VL_non_CDR_combined)
-    results[antibody].VH_CDR_combined = "".join(VH_CDR_combined)
-    results[antibody].VH_non_CDR_combined = "".join(VH_non_CDR_combined)
-    
-    results[antibody].all_CDR_combined = results[antibody].VH_CDR_combined+results[antibody].VL_CDR_combined
-    results[antibody].all_non_CDR_combined = results[antibody].VH_non_CDR_combined+results[antibody].VL_non_CDR_combined
+with open(fasta_file_name+"_VL"+".fasta","w") as outFile:
+    for VL in all_VL:
+        outFile.write(">"+all_VL[VL].name+"_VL\n")
+        outFile.write(all_VL[VL].sequence+"\n")
 
+with open(fasta_file_name+"_VH"+".fasta","w") as outFile:
+    for VH in all_VH:
+        outFile.write(">"+all_VH[VH].name+"_VH\n")
+        outFile.write(all_VH[VH].sequence+"\n")
 
-# In[55]:
-
-
-with open("all_extracted.fasta","w") as outFile:
-    for antibody in results:
-        outFile.write(">"+antibody+"_VH\n")
-        outFile.write(results[antibody].VH_sequence+"\n")
-        outFile.write(">"+antibody+"_VL\n")
-        outFile.write(results[antibody].VL_sequence+"\n")
-        outFile.write(">"+antibody+"_CDRH1\n")
-        outFile.write(results[antibody].CDRH1+"\n")
-        outFile.write(">"+antibody+"_CDRH2\n")
-        outFile.write(results[antibody].CDRH2+"\n")
-        outFile.write(">"+antibody+"_CDRH3\n")
-        outFile.write(results[antibody].CDRH3+"\n")
-        outFile.write(">"+antibody+"_CDRL1\n")
-        outFile.write(results[antibody].CDRL1+"\n")
-        outFile.write(">"+antibody+"_CDRL2\n")
-        outFile.write(results[antibody].CDRL2+"\n")
-        outFile.write(">"+antibody+"_CDRL3\n")
-        outFile.write(results[antibody].CDRL3+"\n")
-        outFile.write(">"+antibody+"_Heavy_CDRs\n")
-        outFile.write(results[antibody].VH_CDR_combined+"\n")
-        outFile.write(">"+antibody+"_Light_CDRs\n")
-        outFile.write(results[antibody].VL_CDR_combined+"\n")
-        outFile.write(">"+antibody+"_Heavy_non_CDRs\n")
-        outFile.write(results[antibody].VH_non_CDR_combined+"\n")
-        outFile.write(">"+antibody+"_Light_non_CDRs\n")
-        outFile.write(results[antibody].VL_non_CDR_combined+"\n")
-        outFile.write(">"+antibody+"_Heavy_and_Light_CDRs\n")
-        outFile.write(results[antibody].all_CDR_combined+"\n")
-        outFile.write(">"+antibody+"_Heavy_and_Light_non_CDRs\n")
-        outFile.write(results[antibody].all_non_CDR_combined+"\n")
+with open(fasta_file_name+"_VL_CDR"+".fasta","w") as outFile:
+    for VL in all_VL:
+        VL_sequence = all_VL[VL].sequence
+        CDRL1, CDRL2, CDRL3, CDRL_index = CDRL_finder(VL_sequence)
+        VL_CDR_combined, VL_non_CDR_combined = build_CDR_and_non_array(VL_sequence,CDRL_index)
         
-with open("CDRs_separate.fasta","w") as outFile:
-    for antibody in results:
-        outFile.write(">"+antibody+"_CDRL1\n")
-        outFile.write(results[antibody].CDRL1+"\n")
-        outFile.write(">"+antibody+"_CDRL2\n")
-        outFile.write(results[antibody].CDRL2+"\n")
-        outFile.write(">"+antibody+"_CDRL3\n")
-        outFile.write(results[antibody].CDRL3+"\n")
-        outFile.write(">"+antibody+"_CDRH1\n")
-        outFile.write(results[antibody].CDRH1+"\n")
-        outFile.write(">"+antibody+"_CDRH2\n")
-        outFile.write(results[antibody].CDRH2+"\n")
-        outFile.write(">"+antibody+"_CDRH3\n")
-        outFile.write(results[antibody].CDRH3+"\n")
-        
-with open("CDRs_chain_combined.fasta","w") as outFile:
-    for antibody in results:
-        outFile.write(">"+antibody+"_Heavy_CDRs\n")
-        outFile.write(results[antibody].VH_CDR_combined+"\n")
-        outFile.write(">"+antibody+"_Light_CDRs\n")
-        outFile.write(results[antibody].VL_CDR_combined+"\n")
-        
-with open("non_CDRs_chain_combined.fasta","w") as outFile:
-    for antibody in results:
-        outFile.write(">"+antibody+"_Heavy_CDRs\n")
-        outFile.write(results[antibody].VH_non_CDR_combined+"\n")
-        outFile.write(">"+antibody+"_Light_CDRs\n")
-        outFile.write(results[antibody].VL_non_CDR_combined+"\n")
-        
-with open("CDRs_combined.fasta","w") as outFile:
-    for antibody in results:
-        outFile.write(">"+antibody+"_Heavy_and_Light_CDRs\n")
-        outFile.write(results[antibody].all_CDR_combined+"\n")
-        
-with open("non_CDRs_combined.fasta","w") as outFile:
-    for antibody in results:
-        outFile.write(">"+antibody+"_Heavy_and_Light_non_CDRs\n")
-        outFile.write(results[antibody].all_non_CDR_combined+"\n")
+        outFile.write(">"+all_VL[VL].name+"_CDR1\n")
+        outFile.write(CDRL1+"\n")
+        outFile.write(">"+all_VL[VL].name+"_CDR2\n")
+        outFile.write(CDRL2+"\n")
+        outFile.write(">"+all_VL[VL].name+"_CDR3\n")
+        outFile.write(CDRL3+"\n")
+        outFile.write(">"+all_VL[VL].name+"_ALL_CDR\n")
+        outFile.write(VL_CDR_combined+"\n")
+        outFile.write(">"+all_VL[VL].name+"_non_CDR\n")
+        outFile.write(VL_non_CDR_combined+"\n")
 
+
+with open(fasta_file_name+"_VH_CDR"+".fasta","w") as outFile:
+    for VH in all_VH:
+        VH_sequence = all_VH[VH].sequence
+        CDRH1, CDRH2, CDRH3, CDRH_index = CDRH_finder(VH_sequence)
+        VH_CDR_combined, VH_non_CDR_combined = build_CDR_and_non_array(VH_sequence,CDRL_index)
+
+        outFile.write(">"+all_VH[VH].name+"_CDR1\n")
+        outFile.write(CDRH1+"\n")
+        outFile.write(">"+all_VH[VH].name+"_CDR2\n")
+        outFile.write(CDRH2+"\n")
+        outFile.write(">"+all_VH[VH].name+"_CDR3\n")
+        outFile.write(CDRH3+"\n")
+        outFile.write(">"+all_VH[VH].name+"_ALL_CDR\n")
+        outFile.write(VH_CDR_combined+"\n")
+        outFile.write(">"+all_VH[VH].name+"_non_CDR\n")
+        outFile.write(VH_non_CDR_combined+"\n")
