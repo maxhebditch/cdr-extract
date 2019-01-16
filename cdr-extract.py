@@ -4,19 +4,6 @@ import os
 import re
 import argparse
 
-
-all_VL = {}
-all_VH = {}
-
-class V_class:
-    def __init__(self, name, sequence):
-        self.name = name
-        self.sequence = sequence
-
-parser = argparse.ArgumentParser()
-parser.add_argument('filename')
-args = parser.parse_args()
-
 def build_CDR_and_non_array(input_sequence,input_index):
     CDR_all_index = []
     for CDR in input_index:
@@ -154,43 +141,74 @@ def CDRL_finder(sequence):
     CDRL_index.append([CDRL3_start,CDRL3_end])
     return CDRL1, CDRL2, CDRL3, CDRL_index
  
+all_VL = {}
+all_VH = {}
+all_chains = {}
+
+class format_result:
+    def __init__(self, name, sequence):
+        self.name = name
+        self.sequence = sequence
+
+parser = argparse.ArgumentParser()
+parser.add_argument('filename')
+args = parser.parse_args()
+
 fasta_file = args.filename
 fasta_file_name = os.path.splitext(fasta_file)[0]
 
+sequence_found = False
 with open(fasta_file,"r") as fasta:
     for line in fasta:
         #Look for name line
         if line.startswith(">"):
+            if sequence_found == True:
+                sequence = "".join(frag for frag in chain_array)
+                all_chains[ab_name] = format_result(ab_name,sequence)
+                sequence_found = False
+                chain_array = []
+            else:
+                chain_array = []
             ab_name = line.replace(">","")
             ab_name = ab_name.strip()
         #If not a name line
         else:
+            sequence_found = True
             chain_sequence = line.replace("\n","")
-            heavy_pattern = re.compile("VS[SA]")
-            light_pattern = re.compile("(E[LIV]KR)|(E[LIV]KKR)|EIIKR|(TVL[GSA])")  
+            chain_array.append(chain_sequence)
 
-            chain_str = "".join(str(a) for a in list(chain_sequence))
+if len(chain_array) > 0:
+    sequence = "".join(frag for frag in chain_array)
+    all_chains[ab_name] = format_result(ab_name,sequence)
+    sequence_found = False
+    chain_array = []
 
-            def extract_V(match_array):
-                if len(match_array) > 1:
-                    V_string = "".join(seq for seq in match_array)
-                else:
-                    V_string = match_array[0]
-                
-                return V_string
+for result in all_chains:
+    chain_str = (all_chains[result].sequence)
 
-            if re.search(light_pattern, chain_str) is not None:
-                match = re.search(light_pattern, chain_str).group(0)
-                light_regex = r"(.*?)" + re.escape(match)
-                VL_array = re.findall(light_regex, chain_str)
-                VL_sequence = extract_V(VL_array)
-                all_VL[ab_name] = V_class(ab_name,VL_sequence)
-            elif re.search(heavy_pattern, chain_str) is not None:
-                VH_array = re.findall("(.*?)VS[SA]", chain_str)
-                VH_sequence = extract_V(VH_array)
-                all_VH[ab_name] = V_class(ab_name,VH_sequence)
-            else:
-                print("Suspected non-ab chain")
+    heavy_pattern = re.compile("VS[SA]")
+    light_pattern = re.compile("(E[LIV]KR)|(E[LIV]KKR)|EIIKR|(TVL[GSA])|(ERKR)")  
+
+    def extract_V(match_array):
+        if len(match_array) > 1:
+            V_string = "".join(seq for seq in match_array)
+        else:
+            V_string = match_array[0]
+        
+        return V_string
+
+    if re.search(light_pattern, chain_str) is not None:
+        match = re.search(light_pattern, chain_str).group(0)
+        light_regex = r"(.*?)" + re.escape(match)
+        VL_array = re.findall(light_regex, chain_str)
+        VL_sequence = extract_V(VL_array)
+        all_VL[ab_name] = format_result(ab_name,VL_sequence)
+    elif re.search(heavy_pattern, chain_str) is not None:
+        VH_array = re.findall("(.*?)VS[SA]", chain_str)
+        VH_sequence = extract_V(VH_array)
+        all_VH[ab_name] = format_result(ab_name,VH_sequence)
+    else:
+        print("Suspected non-ab chain")
 
 if len(all_VL) > 0:
     with open(fasta_file_name+"_VL_CDR"+".fasta","w") as outFile:
