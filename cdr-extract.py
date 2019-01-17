@@ -174,7 +174,7 @@ with open(fasta_file,"r") as fasta:
         #If not a name line
         else:
             sequence_found = True
-            chain_sequence = line.replace("\n","")
+            chain_sequence = line.strip()
             chain_array.append(chain_sequence)
 
 if len(chain_array) > 0:
@@ -184,6 +184,8 @@ if len(chain_array) > 0:
     chain_array = []
 
 for result in all_chains:
+    ab_name = all_chains[result].name
+    print("Processing "+str(ab_name))
     chain_str = (all_chains[result].sequence)
 
     heavy_pattern = re.compile("VS[SA]")
@@ -203,16 +205,20 @@ for result in all_chains:
         VL_array = re.findall(light_regex, chain_str)
         VL_sequence = extract_V(VL_array)
         all_VL[ab_name] = format_result(ab_name,VL_sequence)
+        print("Found light chain")
     elif re.search(heavy_pattern, chain_str) is not None:
         VH_array = re.findall("(.*?)VS[SA]", chain_str)
         VH_sequence = extract_V(VH_array)
         all_VH[ab_name] = format_result(ab_name,VH_sequence)
+        print("Found heavy chain")
     else:
         print("Suspected non-ab chain")
 
 if len(all_VL) > 0:
     with open(fasta_file_name+"_VL_CDR"+".fasta","w") as outFile:
+        print("")
         for VL in all_VL:
+            print("Writing light chain "+str(all_VL[VL].name))
             VL_sequence = all_VL[VL].sequence
             CDRL1, CDRL2, CDRL3, CDRL_index = CDRL_finder(VL_sequence)
             VL_CDR_combined, VL_non_CDR_combined = build_CDR_and_non_array(VL_sequence,CDRL_index)
@@ -232,7 +238,9 @@ if len(all_VL) > 0:
 
 if len(all_VH) > 0:
     with open(fasta_file_name+"_VH_CDR"+".fasta","w") as outFile:
+        print("")
         for VH in all_VH:
+            print("Writing heavy chain "+str(all_VH[VH].name))
             VH_sequence = all_VH[VH].sequence
             CDRH1, CDRH2, CDRH3, CDRH_index = CDRH_finder(VH_sequence)
             VH_CDR_combined, VH_non_CDR_combined = build_CDR_and_non_array(VH_sequence,CDRH_index)
